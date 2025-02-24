@@ -1,0 +1,19 @@
+{
+  "name": "infra",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1000.2"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.179.0",
+    "constructs": "^10.0.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
