@@ -118,6 +118,13 @@ export async function canBookAppointment(
         )
         .count()
 
+      // removes your name from the page before taking the screenshot :)
+      const userNameEl = page.locator(
+        '.main-nav__container :not(.logo) figure > figcaption',
+      )
+      await userNameEl.evaluate((el) => {
+        el.innerHTML = 'Mario Rossi'
+      })
       const screenshot = await page.screenshot()
       const domSnapshot = await page.content()
 
