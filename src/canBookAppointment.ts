@@ -56,14 +56,19 @@ export async function canBookAppointment(
     await page.fill('#login-email', i.credentials.email)
     await page.waitForTimeout(Math.random() * 4000)
     await page.fill('#login-password', i.credentials.password)
-    await page.waitForTimeout(Math.random() * 4000)
+    await page.waitForTimeout(Math.random() * 5000)
     await page.click('button[type="submit"]')
     log.info('Login details filled in and submitted')
 
-    await Promise.race([
-      page.waitForURL('https://prenotami.esteri.it/UserArea'),
-      page.waitForURL('https://prenotami.esteri.it/Login'),
-    ])
+    await page.waitForURL((url) => {
+      log.info(
+        {
+          redirect: url.pathname,
+        },
+        `Login redirected to ${url.pathname}`,
+      )
+      return url.pathname === '/UserArea' || url.pathname === '/Home/Login'
+    })
     log.info('Login completed')
 
     if (await page.$('div.validation-summary-errors.text-danger')) {
