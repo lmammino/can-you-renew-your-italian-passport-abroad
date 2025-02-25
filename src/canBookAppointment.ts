@@ -1,12 +1,13 @@
-import { chromium, type LaunchOptions } from 'playwright-core'
-import { randomUUID } from 'node:crypto'
-import { getBrowserfingerprint } from './utils/fingerprint.ts'
-import tmp from 'tmp-promise'
-import { cloak } from './utils/cloak.ts'
+import { chromium as playwright, type LaunchOptions } from 'playwright-core'
+import chromium from '@sparticuz/chromium'
+import { type Logger, pino } from 'pino'
+
+const CHROMIUM_PATH: string | undefined = process.env.CHROMIUM_PATH
 
 export type CanBookAppointmentInput = {
   credentials: { email: string; password: string }
   launchOptions?: LaunchOptions
+  logger?: Logger
 }
 
 export type CanBookAppointmentOutput =
@@ -25,95 +26,48 @@ export type CanBookAppointmentOutput =
 export async function canBookAppointment(
   i: CanBookAppointmentInput,
 ): Promise<CanBookAppointmentOutput> {
-  const args = [
-    '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
-    '--disable-blink-features=AutomationControlled',
-    '--disable-domain-reliability', // https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md#background-networking
-    '--disable-font-subpixel-positioning', // Force disables font subpixel positioning. This affects the character glyph sharpness, kerning, hinting and layout.
-    '--disable-gpu-compositing', // Prevent the compositor from using its GPU implementation.
-    '--disable-gpu-rasterization', // Disable GPU rasterization, i.e. rasterize on the CPU only. Overrides the kEnableGpuRasterization flag.
-    '--disable-gpu', // Disables GPU hardware acceleration. If software renderer is not in place, then the GPU process won't launch.
-    '--disable-infobars',
-    '--disable-lcd-text',
-    '--disable-print-preview', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisablePrintPreview&ss=chromium
-    '--disable-setuid-sandbox', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSetuidSandbox&ss=chromium
-    '--disable-site-isolation-trials', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSiteIsolation&ss=chromium
-    // '--disable-software-rasterizer', // Disables the use of a 3D software rasterizer. (Necessary to make --disable-gpu work)
-    '--disable-speech-api', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSpeechAPI&ss=chromium
-    '--disable-web-security', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableWebSecurity&ss=chromium
-    // '--disk-cache-size=1',
-    '--disk-cache-size=33554432', // https://source.chromium.org/search?q=lang:cpp+symbol:kDiskCacheSize&ss=chromium
-    '--font-render-hinting=none', // https://github.com/puppeteer/puppeteer/issues/2410#issuecomment-560573612
-    '--force-color-profile=srgb',
-    '--force-device-scale-factor=1', // Overrides the device scale factor for the browser UI and the contents.
-    '--hide-scrollbars', // https://source.chromium.org/search?q=lang:cpp+symbol:kHideScrollbars&ss=chromium
-    '--ignore-certificate-errors',
-    '--ignore-gpu-blocklist', // https://source.chromium.org/search?q=lang:cpp+symbol:kIgnoreGpuBlocklist&ss=chromium
-    '--in-process-gpu', // https://source.chromium.org/search?q=lang:cpp+symbol:kInProcessGPU&ss=chromium
-    '--mute-audio', // https://source.chromium.org/search?q=lang:cpp+symbol:kMuteAudio&ss=chromium
-    '--no-default-browser-check', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoDefaultBrowserCheck&ss=chromium
-    '--no-pings', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoPings&ss=chromium
-    '--no-sandbox', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoSandbox&ss=chromium
-    '--no-zygote', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoZygote&ss=chromium
-    '--ppapi-subpixel-rendering-setting=0', // The enum value of FontRenderParams::subpixel_rendering to be passed to Ppapi processes.
-    '--single-process', // Needs to be single-process to avoid `prctl(PR_SET_NO_NEW_PRIVS) failed` error
-    '--use-angle=swiftshader',
-    '--use-gl=angle',
-    '--window-size=1280,1024', // https://source.chromium.org/search?q=lang:cpp+symbol:kWindowSize&ss=chromium
-    // '--remote-debugging-port=9222',
-  ]
-  if (i.launchOptions?.headless) {
-    args.push(
-      '--headless=new',
-      '--remote-allow-origins=*',
-      '--autoplay-policy=user-gesture-required',
-      '--disable-software-rasterizer',
+  const log = i.logger || pino()
+
+  // CHROMIUM_PATH being set assumes you are running locally
+  if (CHROMIUM_PATH) {
+    await chromium.font(
+      'https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf',
     )
   }
 
-  const defaultLaunchOptions = {
-    args,
-    bypassCSP: true,
-    ignoreHTTPSErrors: true,
-    timezoneId: 'Europe/Dublin',
-  }
-
-  const o = await tmp.dir({
-    unsafeCleanup: true,
+  const browser = await playwright.launch({
+    args: CHROMIUM_PATH ? [] : chromium.args,
+    executablePath: CHROMIUM_PATH || (await chromium.executablePath()),
+    headless: !CHROMIUM_PATH,
   })
-
-  const userDataDir = o.path
-
-  const launchOptions = i.launchOptions || { headless: false }
-  const browser = await chromium.launchPersistentContext(userDataDir, {
-    ...defaultLaunchOptions,
-    ...launchOptions,
-  })
-
-  const fingerprint = await getBrowserfingerprint(randomUUID())
 
   const page = await browser.newPage()
-  // await cloak(page, fingerprint, { minWidth: 1280, minHeight: 1024 })
 
   try {
     // Visit the login page
+    log.info('Visiting the home page')
     await page.goto('https://prenotami.esteri.it/')
     await page.waitForURL('https://prenotami.esteri.it/')
+    log.info('Home page loaded')
 
     // Fill in login details
-    await page.waitForTimeout(Math.random() * 3000)
+    log.info('Filling login details')
+    await page.waitForTimeout(Math.random() * 4000)
     await page.fill('#login-email', i.credentials.email)
-    await page.waitForTimeout(Math.random() * 3000)
+    await page.waitForTimeout(Math.random() * 4000)
     await page.fill('#login-password', i.credentials.password)
-    await page.waitForTimeout(Math.random() * 3000)
+    await page.waitForTimeout(Math.random() * 4000)
     await page.click('button[type="submit"]')
+    log.info('Login details filled in and submitted')
 
     await Promise.race([
       page.waitForURL('https://prenotami.esteri.it/UserArea'),
       page.waitForURL('https://prenotami.esteri.it/Login'),
     ])
+    log.info('Login completed')
 
     if (await page.$('div.validation-summary-errors.text-danger')) {
+      log.error('Invalid credentials message detected')
       await browser.close()
       return {
         bookable: false,
@@ -125,6 +79,7 @@ export async function canBookAppointment(
       document.body.innerText.trim(),
     )
     if (responseText === 'Unavailable') {
+      log.error('Playwright automation detected, request blocked')
       await browser.close()
       return {
         bookable: false,
@@ -133,13 +88,16 @@ export async function canBookAppointment(
     }
 
     // Go to the Services page
+    log.info('Loading services page')
     await page.waitForTimeout(Math.random() * 3000)
     const servicesMenuItem = page.locator('a[href="/Services"]')
     await servicesMenuItem.waitFor({ state: 'visible' })
     await servicesMenuItem.click()
     await page.waitForURL('https://prenotami.esteri.it/Services')
+    log.info('Loaded services page')
 
     // Click on the Prenota button for DOCUMENTI DI IDENTITA'/VIAGGIO
+    log.info('Loading service booking page')
     await page.waitForTimeout(Math.random() * 3000)
     const bookingButton = page.locator('a[href="/Services/Booking/1162"]')
     await bookingButton.waitFor({ state: 'visible' })
@@ -148,6 +106,7 @@ export async function canBookAppointment(
     // Wait for the booking page to load, with a timeout of 10 seconds
     try {
       await page.waitForLoadState('domcontentloaded', { timeout: 10000 })
+      log.info('Service booking page loaded')
 
       // Check for availability modal
       const noAvailability = await page
@@ -167,6 +126,7 @@ export async function canBookAppointment(
       const domSnapshot = await page.content()
 
       if (noAvailability > 0) {
+        log.info('No available slots message detected')
         await browser.close()
         return {
           bookable: false,
@@ -176,6 +136,7 @@ export async function canBookAppointment(
         }
       }
 
+      log.info('Availability detected')
       await browser.close()
       return {
         bookable: true,
@@ -183,7 +144,7 @@ export async function canBookAppointment(
         domSnapshot,
       }
     } catch (error) {
-      console.error(error)
+      log.error('Timeout waiting for booking page to load', error)
       await browser.close()
       return {
         bookable: false,
@@ -191,7 +152,7 @@ export async function canBookAppointment(
       }
     }
   } catch (error) {
-    console.error(error)
+    log.error('Arbitrary error occurred', error)
     await browser.close()
     return {
       bookable: false,

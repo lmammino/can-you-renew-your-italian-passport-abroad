@@ -15,10 +15,21 @@ pnpm install
 
 ## Run the script locally
 
-export the following environment variables:
+Install your local binaries for `chromium`.
+
+One way you could do this is by using `playwright`:
+
+```bash
+pnpm dlx playwright install --with-deps chromium
+```
+
+Then you need to export the following environment variables:
 
 - `PRENOTAMI_EMAIL`: your email
 - `PRENOTAMI_PASSWORD`: your password
+- `CHROMIUM_PATH`: The full path to your chromium binary (on Mac this is
+  generally under
+  `/Library/Caches/ms-playwright/chromium-<version>/chrome-mac/Chromium.app/Contents/MacOS/Chromium`)
 
 Then run
 
@@ -30,4 +41,28 @@ node --import tsx ./src/local_test.ts
 
 ## Install as a Lambda with periodic checks
 
-Coming soon...
+This project can deploy a Lambda to your AWS account that does the following:
+
+- It's executed every 30 minutes to check availability
+- If an appointment is available, it sends an email to the address you specify
+- It will also store the results of every check in a DynamoDB table
+- And it will store the screenshot and a DOM snapshot of the final page in an S3
+  bucket
+
+To deploy the Lambda, you need to have the AWS CLI installed and configured with
+your credentials.
+
+You also need to configure the following environment variables:
+
+- `PRENOTAMI_EMAIL`: your email for logging in
+- `PRENOTAMI_PASSWORD`: your password for logging in
+- `NOTIFICATION_EMAIL`: the email address to send notifications to
+
+Then you can run:
+
+```bash
+cd infra
+cdk deploy
+```
+
+Enjoy! 🎉

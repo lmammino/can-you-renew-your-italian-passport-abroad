@@ -10,13 +10,17 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.751.0",
+    "@aws-sdk/client-s3": "^3.750.0",
     "@aws-sdk/client-sns": "^3.750.0",
+    "@sparticuz/chromium": "^132.0.0",
+    "pino": "^9.6.0",
+    "pino-lambda": "^4.4.1",
     "playwright-core": "^1.50.1",
     "tmp-promise": "^3.0.3",
     "user-agents": "^1.1.460"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.147",
-    "@types/node": "22.7.9"
+    "@types/node": "^22.7.9"
   }
 }

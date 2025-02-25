@@ -1,50 +1,19 @@
-import * as cdk from 'aws-cdk-lib'
 import { join } from 'node:path'
-import { statfs } from 'node:fs/promises'
-import type { Construct } from 'constructs'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
-import { createWriteStream, mkdir } from 'node:fs'
-import { mkdirp } from 'mkdirp'
-import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as cdk from 'aws-cdk-lib'
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
+import * as events from 'aws-cdk-lib/aws-events'
+import * as targets from 'aws-cdk-lib/aws-events-targets'
 import { Architecture, Runtime } from 'aws-cdk-lib/aws-lambda'
-import path = require('node:path')
-
-const CHROMIUM_DOWNLOAD_URL =
-  'https://github.com/chromium-for-lambda/chromium-binaries/releases/download/arm64-amazon-linux-2023-chromium-127.0.6533/headless_shell-127.0.6533.88-arm64-amazon-linux-2023.zip'
-const CHROMIUM_DOWNLOAD_PATH = join(__dirname, '..', '.assets')
-
-async function getChromiumBinary() {
-  const expectedPath = join(CHROMIUM_DOWNLOAD_PATH, 'chromium.zip')
-  let exists = true
-  try {
-    await statfs(expectedPath)
-  } catch {
-    exists = false
-  }
-
-  if (!exists) {
-    console.log('Downloading chromium binary')
-    await mkdirp(CHROMIUM_DOWNLOAD_PATH)
-
-    // download the chromium binary
-    const res = await fetch(CHROMIUM_DOWNLOAD_URL, {
-      method: 'GET',
-    })
-    if (!res.ok || !res.body) {
-      throw new Error('Failed to download chromium binary')
-    }
-
-    // needed ts-ignore because couldn't figure out how to make TS happy -.-
-    // @ts-ignore
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(expectedPath))
-  }
-
-  return expectedPath
-}
+import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as sns from 'aws-cdk-lib/aws-sns'
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions'
+import type { Construct } from 'constructs'
 
 export type CanYouRenewYourItalianPassportAbroadStackProps = cdk.StackProps & {
-  chromiumPath: string
+  notificationEmail: string
+  prenotamiEmail: string
+  prenotamiPassword: string
 }
 
 export class CanYouRenewYourItalianPassportAbroadStack extends cdk.Stack {
@@ -55,22 +24,40 @@ export class CanYouRenewYourItalianPassportAbroadStack extends cdk.Stack {
   ) {
     super(scope, id, props)
 
+    const storageBucket = new s3.Bucket(this, 'Storage', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    })
+
+    const statsTable = new dynamodb.Table(this, 'Stats', {
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    })
+
+    const notificationTopic = new sns.Topic(this, 'Notifications')
+    notificationTopic.addSubscription(
+      new snsSubscriptions.EmailSubscription(props.notificationEmail),
+    )
+
     const lambdaFn = new NodejsFunction(this, 'LambdaFn', {
       description:
         "Checks if there's an available appointment for renewing an Italian passport",
       handler: 'handler',
       entry: join(__dirname, '..', '..', 'src', 'lambda.ts'),
       runtime: Runtime.NODEJS_22_X,
-      architecture: Architecture.ARM_64,
-      logRetention: 90,
+      architecture: Architecture.X86_64,
+      logRetention: 30,
       timeout: cdk.Duration.seconds(900),
-      memorySize: 512,
+      memorySize: 1024,
       environment: {
         NODE_OPTIONS: '--enable-source-maps',
         // TODO: move this to Secrets Manager or SSM
-        PRENOTAMI_EMAIL: process.env.PRENOTAMI_EMAIL || '',
-        PRENOTAMI_PASSWORD: process.env.PRENOTAMI_PASSWORD || '',
-        DEBUG: 'pw:browser',
+        PRENOTAMI_EMAIL: props.prenotamiEmail,
+        PRENOTAMI_PASSWORD: props.prenotamiPassword,
+        TABLE_NAME: statsTable.tableName,
+        BUCKET_NAME: storageBucket.bucketName,
+        NOTIFICATION_TOPIC_ARN: notificationTopic.topicArn,
       },
       bundling: {
         // NOTE: the following 3 lines should solve the runtime error:
@@ -84,20 +71,17 @@ export class CanYouRenewYourItalianPassportAbroadStack extends cdk.Stack {
         sourceMap: true,
         sourcesContent: true,
         target: 'esnext',
-        nodeModules: ['playwright-core'],
-        commandHooks: {
-          beforeBundling: () => [],
-          afterBundling: (inputDir, outputDir) => {
-            const commands = [
-              `rm -rf ${outputDir}/lib`,
-              `mkdir -p ${outputDir}/lib`,
-              `cp -R ${props.chromiumPath}/chrome-headless-shell-linux64/ ${outputDir}/lib`,
-            ]
-            return commands
-          },
-          beforeInstall: () => [],
-        },
+        nodeModules: ['playwright-core', '@sparticuz/chromium'],
       },
     })
+
+    const _lambdaSchedule = new events.Rule(this, 'LambdaScheduleRule', {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(30)),
+      targets: [new targets.LambdaFunction(lambdaFn)],
+    })
+
+    storageBucket.grantWrite(lambdaFn)
+    statsTable.grantWriteData(lambdaFn)
+    notificationTopic.grantPublish(lambdaFn)
   }
 }
