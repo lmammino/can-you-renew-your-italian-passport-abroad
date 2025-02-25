@@ -65,4 +65,7 @@ cd infra
 cdk deploy
 ```
 
+Note that the first time you deploy this you should receive an email to confirm
+your SNS subscription and activate the email notifications.
+
 Enjoy! 🎉
