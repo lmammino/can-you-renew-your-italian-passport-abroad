@@ -7,11 +7,15 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
+    "@types/node": "22.7.9",
+    "@types/unzipper": "^0.10.10",
     "aws-cdk": "2.1000.2"
   },
   "dependencies": {
     "aws-cdk-lib": "2.179.0",
-    "constructs": "^10.0.0"
+    "constructs": "^10.0.0",
+    "mkdirp": "^3.0.1",
+    "unzipper": "^0.12.3"
   },
   "keywords": [],
   "author": "",

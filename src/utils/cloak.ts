@@ -250,9 +250,9 @@ export async function cloak(
         logOverride('webkitGetUserMedia', undefined),
       )
 
-      window.navigator.__defineGetter__('plugins', () =>
-        logOverride('plugins', plugins),
-      )
+      // window.navigator.__defineGetter__('plugins', () =>
+      //   logOverride('plugins', plugins),
+      // )
 
       // handle canvas
       class WebGLRenderingContext {
@@ -316,10 +316,10 @@ export async function cloak(
           origGetContext &&
           (origGetContext.call(this, ...args) ||
             origGetContext.call(this, args[0]))
-        if (!context) {
-          logOverride('canvas.getContext', 'new WebGLRenderingContext()')
-          return new WebGLRenderingContext(this)
-        }
+        // if (!context) {
+        //   logOverride('canvas.getContext', 'new WebGLRenderingContext()')
+        //   return new WebGLRenderingContext(this)
+        // }
         return context
       }
 

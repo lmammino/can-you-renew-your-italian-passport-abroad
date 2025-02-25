@@ -1,4 +1,4 @@
-import { chromium, type LaunchOptions } from 'playwright'
+import { chromium, type LaunchOptions } from 'playwright-core'
 import { randomUUID } from 'node:crypto'
 import { getBrowserfingerprint } from './utils/fingerprint.ts'
 import tmp from 'tmp-promise'
@@ -25,16 +25,54 @@ export type CanBookAppointmentOutput =
 export async function canBookAppointment(
   i: CanBookAppointmentInput,
 ): Promise<CanBookAppointmentOutput> {
+  const args = [
+    '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
+    '--disable-blink-features=AutomationControlled',
+    '--disable-domain-reliability', // https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md#background-networking
+    '--disable-font-subpixel-positioning', // Force disables font subpixel positioning. This affects the character glyph sharpness, kerning, hinting and layout.
+    '--disable-gpu-compositing', // Prevent the compositor from using its GPU implementation.
+    '--disable-gpu-rasterization', // Disable GPU rasterization, i.e. rasterize on the CPU only. Overrides the kEnableGpuRasterization flag.
+    '--disable-gpu', // Disables GPU hardware acceleration. If software renderer is not in place, then the GPU process won't launch.
+    '--disable-infobars',
+    '--disable-lcd-text',
+    '--disable-print-preview', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisablePrintPreview&ss=chromium
+    '--disable-setuid-sandbox', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSetuidSandbox&ss=chromium
+    '--disable-site-isolation-trials', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSiteIsolation&ss=chromium
+    // '--disable-software-rasterizer', // Disables the use of a 3D software rasterizer. (Necessary to make --disable-gpu work)
+    '--disable-speech-api', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSpeechAPI&ss=chromium
+    '--disable-web-security', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableWebSecurity&ss=chromium
+    // '--disk-cache-size=1',
+    '--disk-cache-size=33554432', // https://source.chromium.org/search?q=lang:cpp+symbol:kDiskCacheSize&ss=chromium
+    '--font-render-hinting=none', // https://github.com/puppeteer/puppeteer/issues/2410#issuecomment-560573612
+    '--force-color-profile=srgb',
+    '--force-device-scale-factor=1', // Overrides the device scale factor for the browser UI and the contents.
+    '--hide-scrollbars', // https://source.chromium.org/search?q=lang:cpp+symbol:kHideScrollbars&ss=chromium
+    '--ignore-certificate-errors',
+    '--ignore-gpu-blocklist', // https://source.chromium.org/search?q=lang:cpp+symbol:kIgnoreGpuBlocklist&ss=chromium
+    '--in-process-gpu', // https://source.chromium.org/search?q=lang:cpp+symbol:kInProcessGPU&ss=chromium
+    '--mute-audio', // https://source.chromium.org/search?q=lang:cpp+symbol:kMuteAudio&ss=chromium
+    '--no-default-browser-check', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoDefaultBrowserCheck&ss=chromium
+    '--no-pings', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoPings&ss=chromium
+    '--no-sandbox', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoSandbox&ss=chromium
+    '--no-zygote', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoZygote&ss=chromium
+    '--ppapi-subpixel-rendering-setting=0', // The enum value of FontRenderParams::subpixel_rendering to be passed to Ppapi processes.
+    '--single-process', // Needs to be single-process to avoid `prctl(PR_SET_NO_NEW_PRIVS) failed` error
+    '--use-angle=swiftshader',
+    '--use-gl=angle',
+    '--window-size=1280,1024', // https://source.chromium.org/search?q=lang:cpp+symbol:kWindowSize&ss=chromium
+    // '--remote-debugging-port=9222',
+  ]
+  if (i.launchOptions?.headless) {
+    args.push(
+      '--headless=new',
+      '--remote-allow-origins=*',
+      '--autoplay-policy=user-gesture-required',
+      '--disable-software-rasterizer',
+    )
+  }
+
   const defaultLaunchOptions = {
-    args: [
-      '--no-sandbox',
-      '--remote-debugging-port=9222',
-      '--disable-setuid-sandbox',
-      '--ignore-certificate-errors',
-      '--disk-cache-size=1',
-      '--disable-infobars',
-      '--disable-blink-features=AutomationControlled',
-    ],
+    args,
     bypassCSP: true,
     ignoreHTTPSErrors: true,
     timezoneId: 'Europe/Dublin',
@@ -55,7 +93,7 @@ export async function canBookAppointment(
   const fingerprint = await getBrowserfingerprint(randomUUID())
 
   const page = await browser.newPage()
-  await cloak(page, fingerprint)
+  // await cloak(page, fingerprint, { minWidth: 1280, minHeight: 1024 })
 
   try {
     // Visit the login page
@@ -145,6 +183,7 @@ export async function canBookAppointment(
         domSnapshot,
       }
     } catch (error) {
+      console.error(error)
       await browser.close()
       return {
         bookable: false,
@@ -152,6 +191,7 @@ export async function canBookAppointment(
       }
     }
   } catch (error) {
+    console.error(error)
     await browser.close()
     return {
       bookable: false,
