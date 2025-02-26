@@ -1,6 +1,10 @@
 import { chromium as playwright, type LaunchOptions } from 'playwright-core'
 import chromium from '@sparticuz/chromium'
 import { type Logger, pino } from 'pino'
+import { randomUUID } from 'node:crypto'
+import { getBrowserfingerprint } from './utils/fingerprint.ts'
+import tmp from 'tmp-promise'
+import { cloak } from './utils/cloak.ts'
 
 const CHROMIUM_PATH: string | undefined = process.env.CHROMIUM_PATH
 
@@ -35,6 +39,8 @@ export async function canBookAppointment(
     )
   }
 
+  const fingerprint = await getBrowserfingerprint(randomUUID())
+
   const browser = await playwright.launch({
     args: CHROMIUM_PATH ? [] : chromium.args,
     executablePath: CHROMIUM_PATH || (await chromium.executablePath()),
@@ -42,6 +48,7 @@ export async function canBookAppointment(
   })
 
   const page = await browser.newPage()
+  await cloak(page, fingerprint, { minWidth: 1280, minHeight: 1024 })
 
   try {
     // Visit the login page
