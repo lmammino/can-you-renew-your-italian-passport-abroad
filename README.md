@@ -30,6 +30,7 @@ Then you need to export the following environment variables:
 - `CHROMIUM_PATH`: The full path to your chromium binary (on Mac this is
   generally under
   `/Library/Caches/ms-playwright/chromium-<version>/chrome-mac/Chromium.app/Contents/MacOS/Chromium`)
+  (on windows `C:\Users\<username>\AppData\Local\ms-playwright\chromium-<version>\chrome-win\chrome.exe`)
 
 Then run
 
